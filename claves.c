@@ -5,51 +5,44 @@
 #include "claves.h"
 #define MAX 256
 
-typedef struct Node{
-    char nombre[MAX];   
-    char ip[MAX];  
-    char port[MAX];  
-    bool_t connected;
-    char** listaficheros;  //Cadena de caracteres
-    struct Node *next;      //Puntero al nodo siguiente
-} Node;
 
-static Node *head = NULL;   //Static solo sea visible dentro del archivo
-static pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
-
-
-int recorrer_lista(char* name){
-    Node *temp = head;
-    while(temp != NULL){
-        if(strcmp(temp->nombre, name) == 0){
-            return 1;
+User* find_user(User* head, const char* user_name){
+    User* current = head;
+    while (current != NULL) {
+        if (strcmp(current->name, user_name) == 0) {
+            return current;
         }
-        temp = temp->next;
-    }    
-    return 0;
+        current = current->next;
+    }
+    return NULL;
 }
 
+User* add_user(User** head, const char* user_name){
+    User* new_user = (User*)malloc(sizeof(User));
+    if(!new_user) return NULL;
+    strcpy(new_user->name, user_name, 255);
+    new_user->user_name[255] = '\0';
+    new_user->ip[0] = '\0';
+    new_user->port = -1;
+    new_user->isconnected = false;
+    new_user->files = NULL;
+    new_user->next = *head;
+    *head = new_user;
+    return new_user;
+}
 
-int register(char* name, char* ip, char* port){
+int register(char* name){
     pthread_mutex_lock(&mutex);
-    if(recorrer_lista(name) == 0){
-        Node *newNode = malloc(sizeof(Node));
-        strcpy(newNode->nombre, name);
-        strcpy(newNode->ip, ip);
-        strcpy(newNode->port, port);
-        newNode->connected = false;
-        newNode->next = head;
-        head = newNode;
-        pthread_mutex_unlock(&mutex);
-        return 0;
-    }
-    else if (recorrer_lista(name) == 1){
-        pthread_mutex_unlock(&mutex);
+    if(find_user(*head, name) != NULL){
         return 1;
     }
+    if(add_user(head, name)) {
+        return 2;
+    }
     pthread_mutex_unlock(&mutex);
-    return 2;
+    return 0;
 }
+int connect_user(U)
 
 int unregister(char* name){
     pthread_mutex_lock(&mutex);
