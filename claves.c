@@ -90,8 +90,8 @@ int desregistrar_usuario(const char* nombre) {
 }
 
 // Conexión de un usuario
-int conectar_usuario(const char* nombre, const char* ip, int puerto) {
-    if (!nombre || !ip || puerto <= 0 || puerto > 65535) {
+int conectar_usuario(const char* nombre, int puerto) {
+    if (!nombre || puerto <= 0 || puerto > 65535) {
         return 3; // Parámetros inválidos
     }
 
@@ -105,12 +105,9 @@ int conectar_usuario(const char* nombre, const char* ip, int puerto) {
             if (actual->conectado) {
                 resultado = 2; // Ya conectado
             } else {
-                if (strncpy(actual->ip, ip, MAX)) {
-                    actual->ip[MAX - 1] = '\0';
-                    actual->puerto = puerto;
-                    actual->conectado = true;
-                    resultado = 0; // Éxito
-                }
+                actual->puerto = puerto;
+                actual->conectado = true;
+                resultado = 0;
             }
             break; // Usuario encontrado, salir del bucle
         }

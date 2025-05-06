@@ -4,16 +4,16 @@
 #include "lines.h"
 
 /*Función para enviar mensajes*/
-int sendMessage(int socket, char *buffer, int len)
+int sendMessage(int socket, const char *buffer, int len)
 {
 	int r;
 	int l = len;
 
 	do
 	{
-		r = write(socket, buffer, l);	//Escribe en el socket
-		l = l - r;						//Disminuye la longitud
-		buffer = buffer + r;			//Avanza el buffer
+		r = write(socket, buffer, l);	// Escribe en el socket
+		l = l - r;						// Disminuye la longitud
+		buffer = buffer + r;			// Avanza el buffer
 	} while ((l > 0) && (r >= 0));
 
 	if (r < 0)
