@@ -10,13 +10,13 @@ pthread_mutex_t mutex_usuarios = PTHREAD_MUTEX_INITIALIZER;
 Usuario* lista_usuarios = NULL;
 
 // Función para crear un nuevo usuario
-Usuario* crear_usuario(const char* nombre, const char* ip, int puerto) {
+Usuario* crear_usuario(const char* nombre) {
     Usuario* nuevo = (Usuario*)malloc(sizeof(Usuario));
     if (nuevo) {
         strncpy(nuevo->nombre, nombre, MAX);
         nuevo->nombre[MAX - 1] = '\0';
-        strncpy(nuevo->ip, ip, MAX); // Almacenar la IP
-        nuevo->puerto = puerto;      // Almacenar el puerto
+        nuevo -> ip[0] = '\0'; // Almacenar la IP
+        nuevo->puerto = -1;      // Almacenar el puerto
         nuevo->conectado = false;    // Usuario no está conectado inicialmente
         nuevo->siguiente = NULL;
         nuevo->ficheros = NULL;
@@ -25,7 +25,7 @@ Usuario* crear_usuario(const char* nombre, const char* ip, int puerto) {
 }
 
 // Función para registrar un usuario en la lista
-int registrar_usuario(const char* nombre, const char* ip, int puerto) {
+int registrar_usuario(const char* nombre) {
     pthread_mutex_lock(&mutex_usuarios);
 
     // Verificar si el usuario ya existe
@@ -39,7 +39,7 @@ int registrar_usuario(const char* nombre, const char* ip, int puerto) {
     }
 
     // Crear el nuevo usuario
-    Usuario* nuevo_usuario = crear_usuario(nombre, ip, puerto);
+    Usuario* nuevo_usuario = crear_usuario(nombre);
     if (nuevo_usuario) {
         // Añadir el nuevo usuario al principio de la lista
         nuevo_usuario->siguiente = lista_usuarios;

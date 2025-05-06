@@ -23,10 +23,10 @@ typedef struct Usuario {
 
 
 // Función para crear un nuevo usuario
-Usuario* crear_usuario(const char* nombre, const char* ip, int puerto);
+Usuario* crear_usuario(const char* nombre);
 
 // Función para registrar un usuario en la lista
-int registrar_usuario(const char* nombre, const char* ip, int puerto);
+int registrar_usuario(const char* nombre);
 
 // Función para desregistrar un usuario
 int desregistrar_usuario(const char* nombre);
