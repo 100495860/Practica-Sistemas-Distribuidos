@@ -3,6 +3,7 @@
 #include <string.h>
 #include <pthread.h>
 #include "claves.h"
+<<<<<<< HEAD
 #include <stdbool.h> 
 
 // Mutex global 
@@ -369,4 +370,3 @@ int desconectar_usuario(const char* nombre) {
 
     pthread_mutex_unlock(&mutex_usuarios);
     return 1; // Usuario no encontrado
-}
