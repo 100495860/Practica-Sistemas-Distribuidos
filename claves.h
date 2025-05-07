@@ -32,7 +32,7 @@ int registrar_usuario(const char* nombre);
 int desregistrar_usuario(const char* nombre);
 
 // Función para conectar a un usuario
-int conectar_usuario(const char* nombre, int puerto);
+int conectar_usuario(const char* nombre, int puerto, const char* ip);
 
 // Función para publicar un fichero
 int publicar_fichero(const char* nombre_usuario, const char* nombre_fichero, const char* descripcion);

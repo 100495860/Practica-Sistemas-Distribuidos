@@ -48,14 +48,19 @@ class client :
         srv_socket.bind(('', 0))  # Puerto libre automáticamente
         srv_socket.listen()
         port = srv_socket.getsockname()[1]
+        
+        # Obtener IP local automáticamente
+        hostname = socket.gethostname()
+        local_ip = socket.gethostbyname(hostname)
+        
         @staticmethod
-        def listen_for_peers():
+        def listen_for_peers():            
             while True:
                 conn, addr = srv_socket.accept()
                 threading.Thread(target=client.handle_peer_connection, args=(conn, addr), daemon=True).start()
         
         threading.Thread(target=listen_for_peers, daemon=True).start()
-        return port
+        return port, local_ip
 
     @staticmethod
     def connect_server() :
@@ -137,7 +142,7 @@ class client :
     @staticmethod
     def  connect(user) :
         #Crear puerto de escucha, socket y lanzar hilo
-        listen_port = client.start_server_socket()
+        listen_port, listen_ip = client.start_server_socket()
         client._username = user
         s = client.connect_server()
         if s is None:
@@ -147,6 +152,8 @@ class client :
         if not client.send_data(s,(user + "\x00").encode()):
             return client.RC.ERROR
         if not client.send_data(s, (str(listen_port) + "\x00").encode()):
+            return client.RC.ERROR
+        if not client.send_data(s, (listen_ip + "\x00").encode()):
             return client.RC.ERROR
         
         # Recibir respuesta del servidor: 4 bytes (entero en formato de red)
@@ -229,16 +236,25 @@ class client :
 
 
         # 2. Recibir el número de usuarios (4 bytes)
-        data = client.receive_data(s, 4)
-        num_users = struct.unpack("!I", data)[0]
-        print(f"Connected users: {num_users}")
-
-        for _ in range(num_users):
-            username = client.receive_until_null(s)
-            if username is None:
-                print("Error receiving a username")
-                return client.RC.ERROR
-            print(f" - {username}")
+        if result == 0:
+            num_users = client.receive_data(s, 4)
+            print(f"Connected users: {num_users}")
+            num_users = int(num_users)
+            for _ in range(num_users):
+                username = client.receive_until_null(s)
+                if username is None:
+                    print("Error receiving a username")
+                    return client.RC.ERROR
+                ip = client.receive_until_null(s)
+                if ip is None:
+                    print("Error receiving an IP")
+                    return client.RC.ERROR
+                port = client.receive_until_null(s)
+                if port is None:
+                    print("Error receiving a port")
+                    return client.RC.ERROR
+                print(f"Username: {username} IP: {ip} Port: {port}")
+                
         
 
     @staticmethod
@@ -257,6 +273,18 @@ class client :
         data = client.receive_data(s, 4)
         result = struct.unpack("!I", data)[0]  
         print(f"Server response: {result}")
+
+        if result == 0: 
+            data = client.receive_data(s, 4)
+            num_files = struct.unpack("!I", data)[0]
+            print(f"Number of files: {num_files}")
+
+            for _ in range(num_files):
+                file_name = client.receive_until_null(s)
+                if file_name is None:
+                    print("Error receiving a file name")
+                    return client.RC.ERROR
+                print(f" - {file_name}")
 
 
 

@@ -61,6 +61,7 @@ void *tratar_mensaje(void *arg){
     if(strcmp(operacion, "CONNECT") == 0) {
         char usuario[256];
         char puerto[256];
+        char ip[256];
         if (recv_until_null(client_socket, usuario, sizeof(usuario)) < 0) {
             perror("Error receiving username");
             close(client_socket);
@@ -69,8 +70,13 @@ void *tratar_mensaje(void *arg){
             perror("Error receiving port");
             close(client_socket);
         }
+        if (recv_until_null(client_socket, (char *)&ip, sizeof(ip)) < 0) {
+                perror("Error receiving ip");
+                close(client_socket);
+        }
+
         printf("Connecting user: %s Port: %s\n", usuario, puerto);
-        result = conectar_usuario(usuario, atoi(puerto));
+        result = conectar_usuario(usuario, atoi(puerto), ip);
     }
 
     if(strcmp(operacion, "DISCONNECT") == 0) {
@@ -136,17 +142,29 @@ void *tratar_mensaje(void *arg){
         }
         result = ntohl(result);
         if (result == 0){
-            int total_net = htonl(total_usuarios);
-            if (sendMessage(client_socket, (char*)&total_net, sizeof(int)) == -1) {
+            char total_buf[sizeof(int)];
+            memcpy(total_buf, &total_usuarios, sizeof(int));
+            if (sendMessage(client_socket, (char*)&total_buf, sizeof(int)) == -1) {
                 perror("Error sending user count");
                 close(client_socket);
             }
-
+            
             // Enviar cada nombre de usuario terminado en \0
             for (int i = 0; i < total_usuarios; i++) {
                 const char* nombre = usuarios_conectados[i]->nombre;
                 if (sendMessage(client_socket, (char *)nombre, strlen(nombre) + 1) == -1) {
                     perror("Error sending username");
+                    close(client_socket);
+                }
+                const char* ip = usuarios_conectados[i]->ip;
+                if (sendMessage(client_socket, (char *)ip, strlen(ip) + 1) == -1) {
+                    perror("Error sending ip");
+                    close(client_socket);
+                }
+                char puerto_buf[sizeof(int)];
+                memcpy(puerto_buf, &usuarios_conectados[i]->puerto, sizeof(int));
+                if (sendMessage(client_socket, (char *)&puerto_buf, sizeof(int)) == -1) {
+                    perror("Error sending port");
                     close(client_socket);
                 }
             }
@@ -169,7 +187,30 @@ void *tratar_mensaje(void *arg){
         char** nombres_ficheros;
         int total_ficheros;
         result = listar_ficheros_de_usuario(usuario, usuario_destino, &total_ficheros, &nombres_ficheros);
-        printf("Result: %d\n", result);
+
+        // Convertir resultado a formato de red y enviarlo
+        result = htonl(result);
+        if (sendMessage(client_socket, (char *)&result, sizeof(int)) == -1) {
+            perror("Error en envío\n");
+            close(client_socket);
+        }
+        result = ntohl(result);
+        if (result == 0){
+            int total_net = htonl(total_ficheros);
+            if (sendMessage(client_socket, (char*)&total_net, sizeof(int)) == -1) {
+                perror("Error sending file count");
+                close(client_socket);
+            }
+
+            // Enviar cada nombre de fichero terminado en \0
+            for (int i = 0; i < total_ficheros; i++) {
+                const char* nombre = nombres_ficheros[i];
+                if (sendMessage(client_socket, (char *)nombre, strlen(nombre) + 1) == -1) {
+                    perror("Error sending file name");
+                    close(client_socket);
+                }
+            }
+        }
     }
 
     // Convertir resultado a formato de red y enviarlo

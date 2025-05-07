@@ -3,7 +3,6 @@
 #include <string.h>
 #include <pthread.h>
 #include "claves.h"
-<<<<<<< HEAD
 #include <stdbool.h> 
 
 // Mutex global 
@@ -91,7 +90,7 @@ int desregistrar_usuario(const char* nombre) {
 }
 
 // Conexión de un usuario
-int conectar_usuario(const char* nombre, int puerto) {
+int conectar_usuario(const char* nombre, int puerto, const char* ip) {
     if (!nombre || puerto <= 0 || puerto > 65535) {
         return 3; // Parámetros inválidos
     }
@@ -108,6 +107,8 @@ int conectar_usuario(const char* nombre, int puerto) {
             } else {
                 actual->puerto = puerto;
                 actual->conectado = true;
+                strncpy(actual->ip, ip, MAX);
+                actual->ip[MAX - 1] = '\0';
                 resultado = 0;
             }
             break; // Usuario encontrado, salir del bucle
@@ -370,3 +371,4 @@ int desconectar_usuario(const char* nombre) {
 
     pthread_mutex_unlock(&mutex_usuarios);
     return 1; // Usuario no encontrado
+}
