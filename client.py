@@ -3,6 +3,7 @@ import socket
 import threading
 import argparse
 import struct
+import os
 
 
 
@@ -33,39 +34,17 @@ class client :
     _port = -1
     
     _username = None
-
+    
+    _user_info = {}
+    
+    _user_files = {}
 
     # ******************** METHODS *******************
 
     @staticmethod
-    def handle_peer_connection(conn, addr):
-        # Aquí va el código que maneja las descargas de otros usuarios
-        pass
-
-    @staticmethod
-    def start_server_socket():
-        srv_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        srv_socket.bind(('', 0))  # Puerto libre automáticamente
-        srv_socket.listen()
-        port = srv_socket.getsockname()[1]
-        
-        # Obtener IP local automáticamente
-        hostname = socket.gethostname()
-        local_ip = socket.gethostbyname(hostname)
-        
-        @staticmethod
-        def listen_for_peers():            
-            while True:
-                conn, addr = srv_socket.accept()
-                threading.Thread(target=client.handle_peer_connection, args=(conn, addr), daemon=True).start()
-        
-        threading.Thread(target=listen_for_peers, daemon=True).start()
-        return port, local_ip
-
-    @staticmethod
-    def connect_server() :
-        s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    def connect_server():
         try:
+            s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
             s.connect((client._server, client._port))
             return s
         except socket.error as e:
@@ -76,10 +55,10 @@ class client :
     def send_data(s, data) :
         try:
             s.sendall(data)
+            return True
         except socket.error as e:
             print(f"Socket error: {e}")
             return False
-        return True
     
     @staticmethod
     def receive_data(s, size):
@@ -102,199 +81,243 @@ class client :
                 break
             data += byte
         return data.decode()
+    
+    # ----------------- Servidor Peer -----------------
+    @staticmethod
+    def handle_peer_connection(conn, addr):
+        try:
+            print(f"Connection from {addr} established.")
+            command = client.receive_until_null(conn)
+            if command is None:
+                print("Error receiving command.")
+                return  
+            
+            file_path = client.receive_until_null(conn)
+            if file_path is None:
+                print("Error receiving file path.")
+                return
+            
+            print(f"Requested file: {file_path}")
+            if not os.path.isfile(file_path):
+                print(f"File '{file_path}' not found.")
+                return
+            
+            conn.send(struct.pack("!I", 0))  
+            size = os.path.getsize(file_path)
+            conn.sendall(str(size).encode() + b"\x00")
+            
+            with open(file_path, 'rb') as f:
+                while chunk := f.read(1024):
+                    conn.sendall(chunk)
+
+            print(f"File '{file_path}' sent successfully.")
+        except Exception as e:
+            print(f"Error in peer handler: {e}")
+            try:
+                conn.send(b"\x02")  
+            except:
+                pass
+        finally:
+            conn.close()
+
+    @staticmethod
+    def start_server_socket():
+        srv_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        srv_socket.bind(('', 0))
+        srv_socket.listen()
+        port = srv_socket.getsockname()[1]
+        local_ip = socket.gethostbyname(socket.gethostname())
+        
+        def listen_for_peers():            
+            while True:
+                conn, addr = srv_socket.accept()
+                threading.Thread(target=client.handle_peer_connection, args=(conn, addr), daemon=True).start()
+        
+        threading.Thread(target=listen_for_peers, daemon=True).start()
+        return port, local_ip
+    
+    # ----------------- Funciones -----------------
 
     @staticmethod
     def  register(user) :
         s = client.connect_server()
-        if s is None:
-            return client.RC.ERROR
-        if not client.send_data(s,b"REGISTER\x00"):
-            return client.RC.ERROR
-        if not client.send_data(s,(user + "\x00").encode()):
-            return client.RC.ERROR
-        
-        # Recibir respuesta del servidor: 4 bytes (entero en formato de red)
-        data = client.receive_data(s, 4)
-        result = struct.unpack("!I", data)[0]  
+        if s is None: return client.RC.ERROR
+        if not client.send_data(s, b"REGISTER\x00"): return client.RC.ERROR
+        if not client.send_data(s, (user + "\x00").encode()): return client.RC.ERROR
+
+        result = struct.unpack("!I", client.receive_data(s, 4))[0]
         print(f"Server response: {result}")
-
         s.close()
-        return result
-
-   
 
     @staticmethod
     def  unregister(user) :
         s = client.connect_server()
-        if s is None:
-            return client.RC.ERROR
-        if not client.send_data(s,b"UNREGISTER\x00"):
-            return client.RC.ERROR
-        if not client.send_data(s,(user + "\x00").encode()):
-            return client.RC.ERROR
-        
-        # Recibir respuesta del servidor: 4 bytes (entero en formato de red)
-        data = client.receive_data(s, 4)
-        result = struct.unpack("!I", data)[0]  
+        if s is None: return client.RC.ERROR
+        if not client.send_data(s, b"UNREGISTER\x00"): return client.RC.ERROR
+        if not client.send_data(s, (user + "\x00").encode()): return client.RC.ERROR
+
+        result = struct.unpack("!I", client.receive_data(s, 4))[0]
         print(f"Server response: {result}")
+        s.close()
 
 
     @staticmethod
     def  connect(user) :
-        #Crear puerto de escucha, socket y lanzar hilo
         listen_port, listen_ip = client.start_server_socket()
         client._username = user
+
         s = client.connect_server()
-        if s is None:
-            return client.RC.ERROR
-        if not client.send_data(s,b"CONNECT\x00"):
-            return client.RC.ERROR
-        if not client.send_data(s,(user + "\x00").encode()):
-            return client.RC.ERROR
-        if not client.send_data(s, (str(listen_port) + "\x00").encode()):
-            return client.RC.ERROR
-        if not client.send_data(s, (listen_ip + "\x00").encode()):
-            return client.RC.ERROR
-        
-        # Recibir respuesta del servidor: 4 bytes (entero en formato de red)
-        data = client.receive_data(s, 4)
-        result = struct.unpack("!I", data)[0]  
+        if s is None: return client.RC.ERROR
+        if not client.send_data(s, b"CONNECT\x00"): return client.RC.ERROR
+        if not client.send_data(s, (user + "\x00").encode()): return client.RC.ERROR
+        if not client.send_data(s, (str(listen_port) + "\x00").encode()): return client.RC.ERROR
+        if not client.send_data(s, (listen_ip + "\x00").encode()): return client.RC.ERROR
+
+        result = struct.unpack("!I", client.receive_data(s, 4))[0]
         print(f"Server response: {result}")
+        s.close()
 
     @staticmethod
 
     def  disconnect(user) :
         s = client.connect_server()
-        if s is None:
-            return client.RC.ERROR
-        if not client.send_data(s,b"DISCONNECT\x00"):
-            return client.RC.ERROR
-        if not client.send_data(s,(user + "\x00").encode()):
-            return client.RC.ERROR
+        if s is None: return client.RC.ERROR
+        if not client.send_data(s, b"DISCONNECT\x00"): return client.RC.ERROR
+        if not client.send_data(s, (user + "\x00").encode()): return client.RC.ERROR
+
         client._username = None
-        
-        # Recibir respuesta del servidor: 4 bytes (entero en formato de red)
-        data = client.receive_data(s, 4)
-        result = struct.unpack("!I", data)[0]  
+        result = struct.unpack("!I", client.receive_data(s, 4))[0]
         print(f"Server response: {result}")
+        s.close()
 
 
 
     @staticmethod
     def  publish(fileName,  description) :
         s = client.connect_server()
-        if s is None:
-            return client.RC.ERROR
-        if not client.send_data(s,b"PUBLISH\x00"):
-            return client.RC.ERROR
-        if not client.send_data(s,(client._username + "\x00").encode()):
-            return client.RC.ERROR
-        if not client.send_data(s,(fileName + "\x00").encode()):
-            return client.RC.ERROR
-        if not client.send_data(s,(description + "\x00").encode()):
-            return client.RC.ERROR
-        
-        # Recibir respuesta del servidor: 4 bytes (entero en formato de red)
-        data = client.receive_data(s, 4)
-        result = struct.unpack("!I", data)[0]  
+        if s is None: return client.RC.ERROR
+        if not client.send_data(s, b"PUBLISH\x00"): return client.RC.ERROR
+        if not client.send_data(s, (client._username + "\x00").encode()): return client.RC.ERROR
+        if not client.send_data(s, (fileName + "\x00").encode()): return client.RC.ERROR
+        if not client.send_data(s, (description + "\x00").encode()): return client.RC.ERROR
+
+        result = struct.unpack("!I", client.receive_data(s, 4))[0]
         print(f"Server response: {result}")
+        s.close()
         
     @staticmethod
 
     def  delete(fileName) :
         s = client.connect_server()
-        if s is None:
-            return client.RC.ERROR
-        if not client.send_data(s,b"DELETE\x00"):
-            return client.RC.ERROR
-        if not client.send_data(s,(client._username + "\x00").encode()):
-            return client.RC.ERROR
-        if not client.send_data(s,(fileName + "\x00").encode()):
-            return client.RC.ERROR
-        
-        # Recibir respuesta del servidor: 4 bytes (entero en formato de red)
-        data = client.receive_data(s, 4)
-        result = struct.unpack("!I", data)[0]  
+        if s is None: return client.RC.ERROR
+        if not client.send_data(s, b"DELETE\x00"): return client.RC.ERROR
+        if not client.send_data(s, (client._username + "\x00").encode()): return client.RC.ERROR
+        if not client.send_data(s, (fileName + "\x00").encode()): return client.RC.ERROR
+
+        result = struct.unpack("!I", client.receive_data(s, 4))[0]
         print(f"Server response: {result}")
+        s.close()
 
 
 
     @staticmethod
     def  listusers() :
         s = client.connect_server()
-        if s is None:
-            return client.RC.ERROR
-        if not client.send_data(s,b"LIST_USERS\x00"):
-            return client.RC.ERROR
-        if not client.send_data(s,(client._username + "\x00").encode()):
-            return client.RC.ERROR
-        
-        # 1. Recibir el código de resultado (4 bytes)
-        data = client.receive_data(s, 4)
-        result = struct.unpack("!I", data)[0]
+        if s is None: return client.RC.ERROR
+        if not client.send_data(s, b"LIST_USERS\x00"): return client.RC.ERROR
+        if not client.send_data(s, (client._username + "\x00").encode()): return client.RC.ERROR
+
+        result = struct.unpack("!I", client.receive_data(s, 4))[0]
         print(f"Server response: {result}")
-
-
-        # 2. Recibir el número de usuarios (4 bytes)
         if result == 0:
-            num_users = client.receive_data(s, 4)
+            num_users_str = client.receive_until_null(s)
+            num_users = int(num_users_str)
             print(f"Connected users: {num_users}")
-            num_users = int(num_users)
+            client._user_info.clear()
             for _ in range(num_users):
                 username = client.receive_until_null(s)
-                if username is None:
-                    print("Error receiving a username")
-                    return client.RC.ERROR
                 ip = client.receive_until_null(s)
-                if ip is None:
-                    print("Error receiving an IP")
-                    return client.RC.ERROR
                 port = client.receive_until_null(s)
-                if port is None:
-                    print("Error receiving a port")
+                if None in (username, ip, port):
+                    print("Error receiving user information.")
                     return client.RC.ERROR
                 print(f"Username: {username} IP: {ip} Port: {port}")
+                client._user_info[username] = (ip, int(port))
+        s.close()
+            
                 
         
 
     @staticmethod
     def  listcontent(user) :
         s = client.connect_server()
-        if s is None:   
-            return client.RC.ERROR
-        if not client.send_data(s,b"LIST_CONTENT\x00"):
-            return client.RC.ERROR
-        if not client.send_data(s,(client._username + "\x00").encode()):
-            return client.RC.ERROR
-        if not client.send_data(s,(user + "\x00").encode()):
-            return client.RC.ERROR
-        
-        # Recibir respuesta del servidor: 4 bytes (entero en formato de red)
-        data = client.receive_data(s, 4)
-        result = struct.unpack("!I", data)[0]  
+        if s is None: return client.RC.ERROR
+        if not client.send_data(s, b"LIST_CONTENT\x00"): return client.RC.ERROR
+        if not client.send_data(s, (client._username + "\x00").encode()): return client.RC.ERROR
+        if not client.send_data(s, (user + "\x00").encode()): return client.RC.ERROR
+
+        result = struct.unpack("!I", client.receive_data(s, 4))[0]
         print(f"Server response: {result}")
-
-        if result == 0: 
-            data = client.receive_data(s, 4)
-            num_files = struct.unpack("!I", data)[0]
+        if result == 0:
+            num_files = int(client.receive_until_null(s))
             print(f"Number of files: {num_files}")
-
+            file_list = []
             for _ in range(num_files):
                 file_name = client.receive_until_null(s)
                 if file_name is None:
-                    print("Error receiving a file name")
+                    print("Error receiving file name")
                     return client.RC.ERROR
                 print(f" - {file_name}")
+                file_list.append(file_name)
+            client._user_files[user] = file_list
+        s.close()
+
 
 
 
     @staticmethod
-
     def  getfile(user,  remote_FileName,  local_FileName) :
+        if user not in client._user_info:
+            print(f"User '{user}' not found. Run listusers() first.")
+            return client.RC.ERROR
+        if user not in client._user_files or remote_FileName not in client._user_files[user]:
+            print(f"File '{remote_FileName}' not found for user '{user}'. Run listcontent('{user}') first.")
+            return client.RC.ERROR
 
-        #  Write your code here
+        ip, port = client._user_info[user]
+        try:
+            with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as p_s:
+                p_s.connect((ip, int(port)))
+                if not client.send_data(p_s, b"GET_FILE\x00"): return client.RC.ERROR
+                if not client.send_data(p_s, (remote_FileName + "\x00").encode()): return client.RC.ERROR
 
-        return client.RC.ERROR
+                result = struct.unpack("!I", client.receive_data(p_s, 4))[0]
+                print(f"Peer response: {result}")
+                if result != 0:
+                    return client.RC.ERROR
+
+                size = int(client.receive_until_null(p_s))
+                bytes_received = 0
+                with open(local_FileName, 'wb') as f:
+                    while bytes_received < size:
+                        chunk = p_s.recv(min(4096, size - bytes_received))
+                        if not chunk:
+                            break
+                        f.write(chunk)
+                        bytes_received += len(chunk)
+                        print(f"Received {len(chunk)} bytes")
+
+                if bytes_received != size:
+                    print("File transfer incomplete.")
+                    return client.RC.ERROR
+
+                print(f"File '{remote_FileName}' received as '{local_FileName}'.")
+                return client.RC.OK
+        except Exception as e:
+            print(f"Error during file transfer: {e}")
+            return client.RC.ERROR
+        
+        
 
 
 

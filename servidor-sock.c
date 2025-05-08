@@ -142,10 +142,11 @@ void *tratar_mensaje(void *arg){
         }
         result = ntohl(result);
         if (result == 0){
-            char total_buf[sizeof(int)];
-            memcpy(total_buf, &total_usuarios, sizeof(int));
-            if (sendMessage(client_socket, (char*)&total_buf, sizeof(int)) == -1) {
-                perror("Error sending user count");
+            char total_buf[12]; // suficiente para enteros grandes, incluyendo el null terminator
+            snprintf(total_buf, sizeof(total_buf), "%d", total_usuarios);
+            printf("Enviando total_usuarios como cadena: '%s' (longitud con \\0: %zu)\n", total_buf, strlen(total_buf) + 1);
+            if (sendMessage(client_socket, total_buf, strlen(total_buf) + 1) == -1) {
+                perror("Error sending user count as string");
                 close(client_socket);
             }
             
@@ -161,10 +162,11 @@ void *tratar_mensaje(void *arg){
                     perror("Error sending ip");
                     close(client_socket);
                 }
-                char puerto_buf[sizeof(int)];
-                memcpy(puerto_buf, &usuarios_conectados[i]->puerto, sizeof(int));
-                if (sendMessage(client_socket, (char *)&puerto_buf, sizeof(int)) == -1) {
-                    perror("Error sending port");
+                char total_buf[12]; // suficiente para enteros grandes, incluyendo el null terminator
+                snprintf(total_buf, sizeof(total_buf), "%d", usuarios_conectados[i]->puerto);
+                printf("Enviando puerto como cadena: '%s' (longitud con \\0: %zu)\n", total_buf, strlen(total_buf) + 1);
+                if (sendMessage(client_socket, total_buf, strlen(total_buf) + 1) == -1) {
+                    perror("Error sending port as string");
                     close(client_socket);
                 }
             }
@@ -196,9 +198,11 @@ void *tratar_mensaje(void *arg){
         }
         result = ntohl(result);
         if (result == 0){
-            int total_net = htonl(total_ficheros);
-            if (sendMessage(client_socket, (char*)&total_net, sizeof(int)) == -1) {
-                perror("Error sending file count");
+            char total_buf[12]; // suficiente para enteros grandes, incluyendo el null terminator
+            snprintf(total_buf, sizeof(total_buf), "%d", total_ficheros);
+            printf("Enviando total_ficheros como cadena: '%s' (longitud con \\0: %zu)\n", total_buf, strlen(total_buf) + 1);
+            if (sendMessage(client_socket, total_buf, strlen(total_buf) + 1) == -1) {
+                perror("Error sending file count as string");
                 close(client_socket);
             }
 
