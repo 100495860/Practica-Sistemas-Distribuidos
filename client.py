@@ -1,4 +1,5 @@
 from enum import Enum
+import zeep
 import socket
 import threading
 import argparse
@@ -82,6 +83,18 @@ class client :
             data += byte
         return data.decode()
     
+    # ----------------- Servicio web -----------------
+    @staticmethod
+    def get_datetime():
+        try:
+            wsdl = 'http://127.0.0.1:8000/?wsdl'
+            client = zeep.Client(wsdl=wsdl)
+            result = client.service.getDateTime()
+            return result
+        except Exception as e:
+            print(f"Error connecting to web service: {e}")
+            return None
+    
     # ----------------- Servidor Peer -----------------
     @staticmethod
     def handle_peer_connection(conn, addr):
@@ -144,6 +157,8 @@ class client :
         if s is None: return client.RC.ERROR
         if not client.send_data(s, b"REGISTER\x00"): return client.RC.ERROR
         if not client.send_data(s, (user + "\x00").encode()): return client.RC.ERROR
+        dt = client.get_datetime()
+        print(f"Server response: {dt}")
 
         result = struct.unpack("!I", client.receive_data(s, 4))[0]
         print(f"Server response: {result}")
