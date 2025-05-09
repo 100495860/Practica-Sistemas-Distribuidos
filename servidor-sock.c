@@ -3,10 +3,12 @@
 #include <stdbool.h>
 #include <stdlib.h>
 #include <string.h>
-#include <lines.h>
+#include "lines.h"
 #include <sys/socket.h>
 #include <arpa/inet.h>
+#include <rpc/rpc.h>
 #include "claves.h"
+#include "log.h"
 
 #define MAX_CLIENTS 10
 
@@ -17,6 +19,33 @@ struct ThreadData {
     int client_socket;
     struct sockaddr_in client_addr;
 };
+
+void enviar_rpc(char *usuario, char *operacion, char *publicacion, char *fecha){
+    const char *ip_rpc = getenv("LOG_RPC_IP");
+    if (ip_rpc == NULL) {
+        perror("LOG_RPC_IP not set");
+        exit(1);
+    }
+    CLIENT *clnt;
+    clnt = clnt_create(ip_rpc, OPERACIONLOG, VERSION_MENSAJE, "tcp");
+    if (clnt == NULL) {
+        perror("clnt_create failed");
+        exit(1);
+    }
+    mensaje arg;
+    arg.usuario = usuario;
+    arg.operacion = operacion;
+    arg.publicacion = publicacion;
+    arg.fecha = fecha;
+    int resultado_rpc = 0;
+
+    enum clnt_stat status = registrar_op_1(&arg, &resultado_rpc, clnt);
+    if (status != RPC_SUCCESS) {
+        clnt_perror(clnt, "Error al llamar a registrar_op_1");
+        exit(1);
+    }
+    clnt_destroy(clnt);
+}
 
 /*Función ejecutada por los hilos para procesar una petición del cliente*/
 void *tratar_mensaje(void *arg){
@@ -36,13 +65,20 @@ void *tratar_mensaje(void *arg){
         close(client_socket);
     }
     printf("Received command: %s\n", operacion);
-    
+    char fecha[256];
+    if (recv_until_null(client_socket, fecha, sizeof(fecha)) < 0) {
+        perror("Error receiving date");
+        close(client_socket);
+    }
+    printf("Received date: %s\n", fecha);
+
     if(strcmp(operacion, "REGISTER") == 0) {
         char usuario[256];
         if (recv_until_null(client_socket, usuario, sizeof(usuario)) < 0) {
             perror("Error receiving username");
             close(client_socket);
         }
+        enviar_rpc(usuario, operacion, "", fecha);
         printf("Registering user: %s\n", usuario);
         result = registrar_usuario(usuario);
 
@@ -54,6 +90,7 @@ void *tratar_mensaje(void *arg){
             perror("Error receiving username");
             close(client_socket);
         }
+        enviar_rpc(usuario, operacion, "", fecha);
         printf("Unregistering user: %s\n", usuario);
         result = desregistrar_usuario(usuario);
     }
@@ -74,6 +111,7 @@ void *tratar_mensaje(void *arg){
                 perror("Error receiving ip");
                 close(client_socket);
         }
+        enviar_rpc(usuario, operacion, "", fecha);
 
         printf("Connecting user: %s Port: %s\n", usuario, puerto);
         result = conectar_usuario(usuario, atoi(puerto), ip);
@@ -85,6 +123,7 @@ void *tratar_mensaje(void *arg){
             perror("Error receiving username");
             close(client_socket);
         }
+        enviar_rpc(usuario, operacion, "", fecha);
         printf("Disconnecting user: %s\n", usuario);
         result = desconectar_usuario(usuario);
     }
@@ -105,8 +144,10 @@ void *tratar_mensaje(void *arg){
             perror("Error receiving description");
             close(client_socket);
         }
+        enviar_rpc(usuario, operacion, fichero, fecha);
         printf("Publishing file: %s by user: %s\n", fichero, usuario);
         result = publicar_fichero(usuario, fichero, descripcion);
+        printf("Result: %d\n", result);
     }
 
     if (strcmp(operacion, "DELETE") == 0) {
@@ -120,6 +161,7 @@ void *tratar_mensaje(void *arg){
             perror("Error receiving file name");
             close(client_socket);
         }
+        enviar_rpc(usuario, operacion, fichero, fecha);
         printf("Deleting file: %s by user: %s\n", fichero, usuario);
         result = eliminar_fichero(usuario, fichero);
     }
@@ -130,6 +172,7 @@ void *tratar_mensaje(void *arg){
             perror("Error receiving username");
             close(client_socket);
         }
+        enviar_rpc(usuario, operacion, "", fecha);
         printf("Listing connected users for: %s\n", usuario);
         Usuario** usuarios_conectados;
         int total_usuarios;
@@ -185,6 +228,7 @@ void *tratar_mensaje(void *arg){
             perror("Error receiving destination username");
             close(client_socket);
         }
+        enviar_rpc(usuario, operacion, "", fecha);
         printf("Listing content for user: %s by user: %s\n", usuario_destino, usuario);
         char** nombres_ficheros;
         int total_ficheros;
