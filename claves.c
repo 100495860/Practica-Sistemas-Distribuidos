@@ -13,8 +13,8 @@ Usuario* lista_usuarios = NULL;
 Usuario* crear_usuario(const char* nombre) {
     Usuario* nuevo = (Usuario*)malloc(sizeof(Usuario));
     if (nuevo) {
-        strncpy(nuevo->nombre, nombre, MAX);
-        nuevo->nombre[MAX - 1] = '\0';
+        strncpy(nuevo->nombre, nombre, MAX_LEN);
+        nuevo->nombre[MAX_LEN - 1] = '\0';
         nuevo -> ip[0] = '\0'; // Almacenar la IP
         nuevo->puerto = -1;      // Almacenar el puerto
         nuevo->conectado = false;    // Usuario no está conectado inicialmente
@@ -107,8 +107,8 @@ int conectar_usuario(const char* nombre, int puerto, const char* ip) {
             } else {
                 actual->puerto = puerto;
                 actual->conectado = true;
-                strncpy(actual->ip, ip, MAX);
-                actual->ip[MAX - 1] = '\0';
+                strncpy(actual->ip, ip, MAX_LEN);
+                actual->ip[MAX_LEN - 1] = '\0';
                 resultado = 0;
             }
             break; // Usuario encontrado, salir del bucle
@@ -155,8 +155,8 @@ int publicar_fichero(const char* nombre_usuario, const char* nombre_fichero, con
                 return 4; // Error general (memoria)
             }
 
-            strncpy(nuevo->nombre, nombre_fichero, MAX);
-            nuevo->nombre[MAX - 1] = '\0';
+            strncpy(nuevo->nombre, nombre_fichero, MAX_LEN);
+            nuevo->nombre[MAX_LEN - 1] = '\0';
             nuevo->siguiente = actual->ficheros;
             actual->ficheros = nuevo;
 

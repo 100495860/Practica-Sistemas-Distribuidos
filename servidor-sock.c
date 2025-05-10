@@ -3,35 +3,40 @@
 #include <stdbool.h>
 #include <stdlib.h>
 #include <string.h>
-#include "lines.h"
+#include <netdb.h>
 #include <sys/socket.h>
 #include <arpa/inet.h>
 #include <rpc/rpc.h>
+#include "lines.h"
 #include "claves.h"
 #include "log.h"
 
 #define MAX_CLIENTS 10
 
-pthread_mutex_t mutex_mensaje;
+pthread_mutex_t mutex_mensaje; //Mutex para proteger el acceso a la estructura de mensajes
 
 /* Estructura para pasar datos al hilo */
 struct ThreadData {
-    int client_socket;
-    struct sockaddr_in client_addr;
+    int client_socket;  // Socket del cliente
+    struct sockaddr_in client_addr; // Dirección del cliente
 };
 
+/*Función para enviar las operaciones al servicio de log mediante RPC*/
 void enviar_rpc(char *usuario, char *operacion, char *publicacion, char *fecha){
-    const char *ip_rpc = getenv("LOG_RPC_IP");
+    const char *ip_rpc = getenv("LOG_RPC_IP");  // Obtener la IP del servicio de log desde la variable de entorno
     if (ip_rpc == NULL) {
         perror("LOG_RPC_IP not set");
         exit(1);
     }
-    CLIENT *clnt;
+
+    CLIENT *clnt;   // Crear el cliente RPC
     clnt = clnt_create(ip_rpc, OPERACIONLOG, VERSION_MENSAJE, "tcp");
     if (clnt == NULL) {
         perror("clnt_create failed");
         exit(1);
     }
+
+    // Crear el mensaje a enviar
     mensaje arg;
     arg.usuario = usuario;
     arg.operacion = operacion;
@@ -39,146 +44,115 @@ void enviar_rpc(char *usuario, char *operacion, char *publicacion, char *fecha){
     arg.fecha = fecha;
     int resultado_rpc = 0;
 
-    enum clnt_stat status = registrar_op_1(&arg, &resultado_rpc, clnt);
+    enum clnt_stat status = registrar_op_1(&arg, &resultado_rpc, clnt); // Llamar a la función RPC
     if (status != RPC_SUCCESS) {
         clnt_perror(clnt, "Error al llamar a registrar_op_1");
         exit(1);
     }
-    clnt_destroy(clnt);
-}
+    clnt_destroy(clnt); // Destruir el cliente RPC
+}   
 
 /*Función ejecutada por los hilos para procesar una petición del cliente*/
 void *tratar_mensaje(void *arg){
-    struct ThreadData *data = (struct ThreadData *)arg;
-    int client_socket = data->client_socket;
-    struct sockaddr_in client_addr = data->client_addr;
+    struct ThreadData *data = (struct ThreadData *)arg;     // Estructura para pasar datos al hilo
+    int client_socket = data->client_socket;    // Socket del cliente
     free(data);
-
-    printf("Conexión aceptada de IP: %s   Puerto: %d\n",
-        inet_ntoa(client_addr.sin_addr), ntohl(client_addr.sin_port));
     
     int result;
     char operacion[256];
-    
+    // Recibir la operación del cliente
     if (recv_until_null(client_socket, operacion, sizeof(operacion)) < 0) {
         perror("Error receiving command");
         close(client_socket);
     }
-    printf("Received command: %s\n", operacion);
     char fecha[256];
+    // Recibir la fecha del cliente
     if (recv_until_null(client_socket, fecha, sizeof(fecha)) < 0) {
         perror("Error receiving date");
         close(client_socket);
     }
-    printf("Received date: %s\n", fecha);
 
+    char usuario[256];
+    // Recibir el nombre de usuario del cliente
+    if (recv_until_null(client_socket, usuario, sizeof(usuario)) < 0) {
+        perror("Error receiving username");
+        close(client_socket);
+    }
+    printf("OPERATION %s FROM %s\n", operacion, usuario);
+
+    //Operacion de registro
     if(strcmp(operacion, "REGISTER") == 0) {
-        char usuario[256];
-        if (recv_until_null(client_socket, usuario, sizeof(usuario)) < 0) {
-            perror("Error receiving username");
-            close(client_socket);
-        }
         enviar_rpc(usuario, operacion, "", fecha);
-        printf("Registering user: %s\n", usuario);
         result = registrar_usuario(usuario);
-
     }
 
+    //Operacion de desregistro
     if(strcmp(operacion, "UNREGISTER") == 0) {
-        char usuario[256];
-        if (recv_until_null(client_socket, usuario, sizeof(usuario)) < 0) {
-            perror("Error receiving username");
-            close(client_socket);
-        }
         enviar_rpc(usuario, operacion, "", fecha);
-        printf("Unregistering user: %s\n", usuario);
         result = desregistrar_usuario(usuario);
     }
 
+    //Operacion de conexion
     if(strcmp(operacion, "CONNECT") == 0) {
-        char usuario[256];
         char puerto[256];
         char ip[256];
-        if (recv_until_null(client_socket, usuario, sizeof(usuario)) < 0) {
-            perror("Error receiving username");
-            close(client_socket);
-        }
+        // Recibir el puerto del cliente
         if (recv_until_null(client_socket, (char *)&puerto, sizeof(puerto)) < 0) {
             perror("Error receiving port");
             close(client_socket);
         }
+        // Recibir la IP del cliente
         if (recv_until_null(client_socket, (char *)&ip, sizeof(ip)) < 0) {
                 perror("Error receiving ip");
                 close(client_socket);
         }
         enviar_rpc(usuario, operacion, "", fecha);
-
-        printf("Connecting user: %s Port: %s\n", usuario, puerto);
         result = conectar_usuario(usuario, atoi(puerto), ip);
     }
 
+    //Operacion de desconexion
     if(strcmp(operacion, "DISCONNECT") == 0) {
-        char usuario[256];
-        if (recv_until_null(client_socket, usuario, sizeof(usuario)) < 0) {
-            perror("Error receiving username");
-            close(client_socket);
-        }
         enviar_rpc(usuario, operacion, "", fecha);
-        printf("Disconnecting user: %s\n", usuario);
         result = desconectar_usuario(usuario);
     }
 
+    //Operacion de publicacion
     if (strcmp(operacion, "PUBLISH") == 0) {
-        char usuario[256];
         char fichero[256];
         char descripcion[256];
-        if (recv_until_null(client_socket, usuario, sizeof(usuario)) < 0) {
-            perror("Error receiving username");
-            close(client_socket);
-        }
+        // Recibir el nombre del fichero del cliente
         if (recv_until_null(client_socket, fichero, sizeof(fichero)) < 0) {
             perror("Error receiving file name");
-            close(client_socket);
         }
+        // Recibir la descripcion del fichero del cliente
         if (recv_until_null(client_socket, descripcion, sizeof(descripcion)) < 0) {
             perror("Error receiving description");
-            close(client_socket);
         }
         enviar_rpc(usuario, operacion, fichero, fecha);
-        printf("Publishing file: %s by user: %s\n", fichero, usuario);
         result = publicar_fichero(usuario, fichero, descripcion);
-        printf("Result: %d\n", result);
     }
 
+    //Operacion de eliminacion
     if (strcmp(operacion, "DELETE") == 0) {
-        char usuario[256];
         char fichero[256];
-        if (recv_until_null(client_socket, usuario, sizeof(usuario)) < 0) {
-            perror("Error receiving username");
-            close(client_socket);
-        }
+        // Recibir el nombre del fichero del cliente
         if (recv_until_null(client_socket, fichero, sizeof(fichero)) < 0) {
             perror("Error receiving file name");
             close(client_socket);
         }
         enviar_rpc(usuario, operacion, fichero, fecha);
-        printf("Deleting file: %s by user: %s\n", fichero, usuario);
         result = eliminar_fichero(usuario, fichero);
     }
 
+    //Operacion de listar usuarios
     if (strcmp(operacion, "LIST_USERS") == 0) {
-        char usuario[256];
-        if (recv_until_null(client_socket, usuario, sizeof(usuario)) < 0) {
-            perror("Error receiving username");
-            close(client_socket);
-        }
         enviar_rpc(usuario, operacion, "", fecha);
-        printf("Listing connected users for: %s\n", usuario);
         Usuario** usuarios_conectados;
         int total_usuarios;
         result = listar_usuarios_conectados(usuario, &total_usuarios, &usuarios_conectados);
         // Convertir resultado a formato de red y enviarlo
         result = htonl(result);
+        // Enviar el resultado al cliente
         if (sendMessage(client_socket, (char *)&result, sizeof(int)) == -1) {
             perror("Error en envío\n");
             close(client_socket);
@@ -187,7 +161,7 @@ void *tratar_mensaje(void *arg){
         if (result == 0){
             char total_buf[12]; // suficiente para enteros grandes, incluyendo el null terminator
             snprintf(total_buf, sizeof(total_buf), "%d", total_usuarios);
-            printf("Enviando total_usuarios como cadena: '%s' (longitud con \\0: %zu)\n", total_buf, strlen(total_buf) + 1);
+            // Enviar el número total de usuarios conectados
             if (sendMessage(client_socket, total_buf, strlen(total_buf) + 1) == -1) {
                 perror("Error sending user count as string");
                 close(client_socket);
@@ -205,9 +179,8 @@ void *tratar_mensaje(void *arg){
                     perror("Error sending ip");
                     close(client_socket);
                 }
-                char total_buf[12]; // suficiente para enteros grandes, incluyendo el null terminator
+                char total_buf[12];
                 snprintf(total_buf, sizeof(total_buf), "%d", usuarios_conectados[i]->puerto);
-                printf("Enviando puerto como cadena: '%s' (longitud con \\0: %zu)\n", total_buf, strlen(total_buf) + 1);
                 if (sendMessage(client_socket, total_buf, strlen(total_buf) + 1) == -1) {
                     perror("Error sending port as string");
                     close(client_socket);
@@ -215,21 +188,19 @@ void *tratar_mensaje(void *arg){
             }
             free(usuarios_conectados);
         }
+        close(client_socket);  
+        pthread_exit(NULL);
     }
 
+    //Operacion de listar ficheros
     if (strcmp(operacion, "LIST_CONTENT") == 0) {
-        char usuario[256];
         char usuario_destino[256];
-        if (recv_until_null(client_socket, usuario, sizeof(usuario)) < 0) {
-            perror("Error receiving username");
-            close(client_socket);
-        }
+        // Recibir el nombre de usuario destino del cliente
         if (recv_until_null(client_socket, usuario_destino, sizeof(usuario_destino)) < 0) {
             perror("Error receiving destination username");
             close(client_socket);
         }
         enviar_rpc(usuario, operacion, "", fecha);
-        printf("Listing content for user: %s by user: %s\n", usuario_destino, usuario);
         char** nombres_ficheros;
         int total_ficheros;
         result = listar_ficheros_de_usuario(usuario, usuario_destino, &total_ficheros, &nombres_ficheros);
@@ -242,9 +213,9 @@ void *tratar_mensaje(void *arg){
         }
         result = ntohl(result);
         if (result == 0){
-            char total_buf[12]; // suficiente para enteros grandes, incluyendo el null terminator
+            char total_buf[12];
             snprintf(total_buf, sizeof(total_buf), "%d", total_ficheros);
-            printf("Enviando total_ficheros como cadena: '%s' (longitud con \\0: %zu)\n", total_buf, strlen(total_buf) + 1);
+            // Enviar el número total de ficheros
             if (sendMessage(client_socket, total_buf, strlen(total_buf) + 1) == -1) {
                 perror("Error sending file count as string");
                 close(client_socket);
@@ -259,6 +230,8 @@ void *tratar_mensaje(void *arg){
                 }
             }
         }
+        close(client_socket);  
+        pthread_exit(NULL);
     }
 
     // Convertir resultado a formato de red y enviarlo
@@ -268,13 +241,7 @@ void *tratar_mensaje(void *arg){
         close(client_socket);
     }
 
-   
-
-
-    close(client_socket);  // Cierra conexión con el cliente
-    printf("Conexión cerrada con IP: %s   Puerto: %d\n",
-           inet_ntoa(client_addr.sin_addr), ntohs(client_addr.sin_port));
-
+    close(client_socket);  
     pthread_exit(NULL);
 }
 
@@ -317,6 +284,18 @@ int main(int argc, char *argv[]){
         return -1;
     }
 
+    char hostname[128];
+    gethostname(hostname, sizeof(hostname));  // Obtener nombre del host
+
+    struct hostent *host_entry = gethostbyname(hostname);  // Obtener info del host
+    if (host_entry == NULL) {
+        perror("gethostbyname");
+        exit(1);
+    }
+
+    char *local_ip = inet_ntoa(*((struct in_addr*)host_entry->h_addr_list[0]));
+    printf("init server %s:%d\n", local_ip, ntohs(server_addr.sin_port));
+
     //Escuchar peticiones
     if (listen(sd, MAX_CLIENTS) < 0) {
         perror("Error en el listen");
@@ -329,7 +308,6 @@ int main(int argc, char *argv[]){
     while (1){
 
         size = sizeof(client_addr);
-        printf("Esperando...\n");
 
         //Aceptar peticiones
         if ((sc = accept(sd, (struct sockaddr *) &client_addr, &size)) < 0) {

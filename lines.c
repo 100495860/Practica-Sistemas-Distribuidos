@@ -27,15 +27,15 @@ int recv_until_null(int sock, char *buffer, int max_len) {
     int total = 0;
     char ch;
 
-    while (total < max_len - 1) {
-        int n = recv(sock, &ch, 1, 0);
+    while (total < max_len - 1) {	// Deja espacio para el terminador nulo
+        int n = recv(sock, &ch, 1, 0);	// Recibe un byte
         if (n <= 0) return -1;
 
-        buffer[total++] = ch;
+        buffer[total++] = ch;		// Almacena el byte
 
-        if (ch == '\0') break;
+        if (ch == '\0') break;	// Si se recibe un terminador nulo, termina
     }
 
-    buffer[total] = '\0';
+    buffer[total] = '\0';	// Añade el terminador nulo al final
     return total;
 }

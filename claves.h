@@ -3,18 +3,18 @@
 #include <stdbool.h> 
 
 
-#define MAX 256 // Tamaño máximo de la clave
+#define MAX_LEN 256 // Tamaño máximo de la clave
 
 // Estructura para los ficheros
 typedef struct Fichero {
-    char nombre[MAX];
+    char nombre[MAX_LEN];
     struct Fichero* siguiente;
 } Fichero;
 
 // Estructura para los usuarios
 typedef struct Usuario {
-    char nombre[MAX];
-    char ip[MAX];
+    char nombre[MAX_LEN];
+    char ip[MAX_LEN];
     int puerto;
     bool conectado;
     Fichero* ficheros;
