@@ -1,11 +1,20 @@
 import os
 import sys
+import argparse
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 from client import client
 
+
+# Parser de argumentos
+parser = argparse.ArgumentParser(description="Ejecuta pruebas cliente-servidor.")
+parser.add_argument('-s', '--server', required=True, help='Dirección IP del servidor')
+parser.add_argument('-p', '--port', type=int, required=True, help='Puerto del servidor')
+args = parser.parse_args()
+print("==== INICIO DE PRUEBAS DE FUNCIONES CLIENTE-SERVIDOR ====\n")
+
 # ----------------------------
-client._server = "localhost"
-client._port = 5760
+client._server = args.server
+client._port = args.port
 
 # Inicia el servidor para escuchar conexiones de otros peers
 peer_port, peer_ip = client.start_server_socket()

@@ -1,12 +1,22 @@
+import os
+import sys
+import argparse
+
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 from client import client
 
+# Parser de argumentos
+parser = argparse.ArgumentParser(description="Ejecuta pruebas cliente-servidor.")
+parser.add_argument('-s', '--server', required=True, help='Dirección IP del servidor')
+parser.add_argument('-p', '--port', type=int, required=True, help='Puerto del servidor')
+args = parser.parse_args()
 print("==== INICIO DE PRUEBAS DE FUNCIONES CLIENTE-SERVIDOR ====\n")
 
 # ----------------------------
 # Test 1: Registro exitoso
 print("Test 1: Registro exitoso")
-client._server = "localhost"
-client._port = 5760
+client._server = args.server
+client._port = args.port
 client.register("user1")
 print()
 
